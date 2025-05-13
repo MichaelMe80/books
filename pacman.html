@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man Spiel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Press Start 2P', cursive;
+        }
+        #gameCanvas {
+            border: 2px solid #fff;
+            background-color: #000;
+            display: block; /* Verhindert zusätzlichen Platz unter dem Canvas */
+            max-width: 100%;
+            max-height: 80vh; /* Begrenzt die Höhe auf dem Bildschirm */
+            aspect-ratio: 1 / 1; /* Sorgt für ein quadratisches Seitenverhältnis, anpassbar */
+        }
+        #gameControls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .control-button {
+            background-color: #ff0; /* Gelb */
+            color: #000; /* Schwarz */
+            border: 2px solid #fff;
+            padding: 10px 15px;
+            margin: 5px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            border-radius: 8px;
+            box-shadow: 0 4px #999;
+            transition: all 0.1s ease;
+        }
+        .control-button:active {
+            box-shadow: 0 2px #666;
+            transform: translateY(2px);
+        }
+        #scoreBoard {
+            margin-top: 10px;
+            font-size: 1.2em;
+        }
+        #messageBox {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            font-size: 1.5em;
+            text-align: center;
+            z-index: 100;
+            display: none; /* Standardmäßig ausgeblendet */
+        }
+        #messageBox button {
+            background-color: #ff0;
+            color: #000;
+            border: 2px solid #fff;
+            padding: 10px 20px;
+            margin-top: 20px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="scoreBoard">Punkte: <span id="score">0</span> Leben: <span id="lives">3</span></div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameControls">
+        <button class="control-button" id="upButton">Hoch</button>
+        <div>
+            <button class="control-button" id="leftButton">Links</button>
+            <button class="control-button" id="downButton">Runter</button>
+            <button class="control-button" id="rightButton">Rechts</button>
+        </div>
+    </div>
+    <div id="messageBox">
+        <p id="messageText"></p>
+        <button id="restartButton">Neustart</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const restartButton = document.getElementById('restartButton');
+
+        // Arcade-Font für Canvas-Text
+        ctx.font = "16px 'Press Start 2P'";
+
+        // Spielvariablen
+        let tileSize; // Größe einer Kachel, wird dynamisch berechnet
+        const gridWidth = 19; // Breite des Labyrinths in Kacheln
+        const gridHeight = 21; // Höhe des Labyrinths in Kacheln
+
+        // Labyrinth-Layout (0 = Wand, 1 = Weg, 2 = Punkt, 3 = Power-Pille, 4 = Leerer Weg nach Punkt)
+        let map = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,2,2,2,2,2,2,2,2,0,2,2,2,2,2,2,2,2,0],
+            [0,3,0,0,2,0,0,0,2,0,2,0,0,0,2,0,0,3,0],
+            [0,2,0,0,2,0,0,0,2,0,2,0,0,0,2,0,0,2,0],
+            [0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0],
+            [0,2,0,0,2,0,2,0,0,0,0,0,2,0,2,0,0,2,0],
+            [0,2,2,2,2,0,2,2,2,0,2,2,2,0,2,2,2,2,0],
+            [0,0,0,0,2,0,0,0,1,0,1,0,0,0,2,0,0,0,0],
+            [1,1,1,0,2,0,1,1,1,1,1,1,1,0,2,0,1,1,1], // Geisterhaus-Umgebung
+            [0,0,0,0,2,0,1,0,0,1,0,0,1,0,2,0,0,0,0], // Geisterhaus-Tür oben
+            [1,1,1,1,2,1,1,0,1,1,1,0,1,1,2,1,1,1,1], // Geisterhaus Mitte
+            [0,0,0,0,2,0,1,0,0,0,0,0,1,0,2,0,0,0,0],
+            [1,1,1,0,2,0,1,1,1,1,1,1,1,0,2,0,1,1,1],
+            [0,0,0,0,2,0,0,0,1,0,1,0,0,0,2,0,0,0,0],
+            [0,2,2,2,2,2,2,2,2,0,2,2,2,2,2,2,2,2,0],
+            [0,2,0,0,2,0,0,0,2,0,2,0,0,0,2,0,0,2,0],
+            [0,3,2,0,2,2,2,2,2,2,2,2,2,2,2,0,2,3,0],
+            [0,0,2,0,2,0,2,0,0,0,0,0,2,0,2,0,2,0,0],
+            [0,2,2,2,2,0,2,2,2,0,2,2,2,0,2,2,2,2,0],
+            [0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        let score = 0;
+        let lives = 3;
+        let pacman = { x: 9, y: 15, dir: 'RIGHT', nextDir: 'RIGHT', speed: 0.125, angle: 0, mouthOpen: true, mouthAngle: 0.2 }; // Startposition und Geschwindigkeit
+        let ghosts = [];
+        const ghostColors = ['#FF0000', '#FFB8FF', '#00FFFF', '#FFB852']; // Rot, Pink, Cyan, Orange
+        const ghostSpawnPoints = [
+            { x: 8, y: 9, dir: 'UP'}, // Im Geisterhaus
+            { x: 9, y: 9, dir: 'UP'},
+            { x: 10, y: 9, dir: 'UP'},
+            { x: 9, y: 8, dir: 'UP'} // Einer startet außerhalb, um Blockaden zu vermeiden
+        ];
+        let powerPillActive = false;
+        let powerPillTimer = 0;
+        const powerPillDuration = 8000; // 8 Sekunden
+        let totalPellets = 0;
+        let gameRunning = true;
+        let animationFrameId;
+
+        // Touch-Steuerung
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchEndX = 0;
+        let touchEndY = 0;
+
+        function initGame() {
+            resizeCanvas(); // Canvas-Größe beim Start anpassen
+            pacman = { x: 9, y: 15, dir: 'RIGHT', nextDir: 'RIGHT', speed: 0.125, angle: 0, mouthOpen: true, mouthAngle: 0.2 };
+            score = 0;
+            lives = 3;
+            powerPillActive = false;
+            powerPillTimer = 0;
+            updateScoreboard();
+            countTotalPellets();
+            spawnGhosts();
+            gameRunning = true;
+            messageBox.style.display = 'none';
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); // Stoppt vorherige Animation
+            gameLoop();
+        }
+
+        function resizeCanvas() {
+            const aspectRatio = gridWidth / gridHeight;
+            const parentWidth = canvas.parentElement.clientWidth * 0.9; // 90% der Breite des Elternelements
+            const parentHeight = window.innerHeight * 0.7; // 70% der Höhe des Ansichtsfensters
+
+            let newCanvasWidth, newCanvasHeight;
+
+            if (parentWidth / parentHeight > aspectRatio) {
+                // Höhe ist der begrenzende Faktor
+                newCanvasHeight = parentHeight;
+                newCanvasWidth = newCanvasHeight * aspectRatio;
+            } else {
+                // Breite ist der begrenzende Faktor
+                newCanvasWidth = parentWidth;
+                newCanvasHeight = newCanvasWidth / aspectRatio;
+            }
+
+            canvas.width = newCanvasWidth;
+            canvas.height = newCanvasHeight;
+            tileSize = Math.min(canvas.width / gridWidth, canvas.height / gridHeight); // Kachelgröße basierend auf der kleineren Dimension
+
+            // Stelle sicher, dass tileSize eine ganze Zahl ist, um Rendering-Artefakte zu vermeiden
+            tileSize = Math.floor(tileSize);
+            canvas.width = tileSize * gridWidth;
+            canvas.height = tileSize * gridHeight;
+
+            drawGame(); // Spiel neu zeichnen nach Größenänderung
+        }
+
+
+        function countTotalPellets() {
+            totalPellets = 0;
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
+                    if (map[y][x] === 2) { // Normale Pellets
+                        totalPellets++;
+                    }
+                }
+            }
+        }
+
+        function spawnGhosts() {
+            ghosts = [];
+            for (let i = 0; i < ghostColors.length; i++) {
+                ghosts.push({
+                    ...ghostSpawnPoints[i], // Startposition aus Array
+                    color: ghostColors[i],
+                    speed: 0.1, // Geister sind etwas langsamer als Pacman
+                    isFrightened: false,
+                    isEaten: false,
+                    targetX: pacman.x, // Ziel ist Pac-Man
+                    targetY: pacman.y,
+                    id: i
+                });
+            }
+        }
+
+        function drawGame() {
+            ctx.fillStyle = '#000'; // Hintergrund
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawMap();
+            drawPacman();
+            drawGhosts();
+        }
+
+        function drawMap() {
+            for (let y = 0; y < gridHeight; y++) {
+                for (let x = 0; x < gridWidth; x++) {
+                    const tileX = x * tileSize;
+                    const tileY = y * tileSize;
+
+                    if (map[y][x] === 0) { // Wand
+                        ctx.fillStyle = '#0000FF'; // Blau für Wände
+                        ctx.fillRect(tileX, tileY, tileSize, tileSize);
+                    } else if (map[y][x] === 2) { // Punkt
+                        ctx.fillStyle = '#FFFF00'; // Gelb für Punkte
+                        ctx.beginPath();
+                        ctx.arc(tileX + tileSize / 2, tileY + tileSize / 2, tileSize / 8, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (map[y][x] === 3) { // Power-Pille
+                        ctx.fillStyle = '#FFFFFF'; // Weiß für Power-Pillen
+                        ctx.beginPath();
+                        ctx.arc(tileX + tileSize / 2, tileY + tileSize / 2, tileSize / 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+        }
+
+        function drawPacman() {
+            const pacX = pacman.x * tileSize + tileSize / 2;
+            const pacY = pacman.y * tileSize + tileSize / 2;
+
+            ctx.fillStyle = '#FFFF00'; // Gelb für Pac-Man
+            ctx.beginPath();
+
+            if (pacman.mouthOpen) {
+                let startAngle = pacman.angle + pacman.mouthAngle;
+                let endAngle = pacman.angle - pacman.mouthAngle + Math.PI * 2;
+                ctx.arc(pacX, pacY, tileSize / 2.5, startAngle, endAngle);
+            } else {
+                 ctx.arc(pacX, pacY, tileSize / 2.5, 0, Math.PI * 2); // Geschlossener Mund beim Stillstand
+            }
+            ctx.lineTo(pacX, pacY);
+            ctx.fill();
+
+            // Augen (optional, für mehr Detail)
+            ctx.fillStyle = 'black';
+            let eyeX, eyeY;
+            const eyeOffset = tileSize / 8;
+            switch(pacman.dir) {
+                case 'UP':    eyeX = pacX; eyeY = pacY - eyeOffset; break;
+                case 'DOWN':  eyeX = pacX; eyeY = pacY + eyeOffset; break;
+                case 'LEFT':  eyeX = pacX - eyeOffset; eyeY = pacY; break;
+                case 'RIGHT': eyeX = pacX + eyeOffset; eyeY = pacY; break;
+                default:      eyeX = pacX + eyeOffset; eyeY = pacY; // Standard nach rechts
+            }
+            if (pacman.mouthOpen) { // Nur Auge zeichnen, wenn Mund offen ist (oder immer, je nach Präferenz)
+                ctx.beginPath();
+                ctx.arc(eyeX, eyeY, tileSize / 12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawGhosts() {
+            ghosts.forEach(ghost => {
+                if (ghost.isEaten && !powerPillActive) return; // Gegessene Geister nicht zeichnen, es sei denn, sie respawnen
+
+                const ghostDrawX = ghost.x * tileSize;
+                const ghostDrawY = ghost.y * tileSize;
+                const ghostRadius = tileSize / 2.5;
+
+                ctx.fillStyle = ghost.isFrightened ? '#ADD8E6' : ghost.color; // Hellblau, wenn verängstigt
+
+                // Körper
+                ctx.beginPath();
+                ctx.arc(ghostDrawX + tileSize / 2, ghostDrawY + tileSize / 2, ghostRadius, Math.PI, 0);
+                ctx.lineTo(ghostDrawX + tileSize / 2 + ghostRadius, ghostDrawY + tileSize - ghostRadius / 3); // Rechts unten
+                // Zacken
+                for (let i = 0; i < 3; i++) {
+                    ctx.lineTo(ghostDrawX + tileSize / 2 + ghostRadius - (i * ghostRadius * 2/3) - ghostRadius/6 , ghostDrawY + tileSize - ghostRadius / 2);
+                    ctx.lineTo(ghostDrawX + tileSize / 2 + ghostRadius - ((i+0.5) * ghostRadius * 2/3) , ghostDrawY + tileSize - ghostRadius / 3);
+                }
+                ctx.lineTo(ghostDrawX + tileSize / 2 - ghostRadius, ghostDrawY + tileSize - ghostRadius / 3); // Links unten
+                ctx.closePath();
+                ctx.fill();
+
+                // Augen
+                ctx.fillStyle = '#FFF'; // Weiß für Augen
+                const eyeOffsetX = tileSize / 5;
+                const eyeOffsetY = tileSize / 6;
+                const eyeRadius = tileSize / 8;
+
+                // Linkes Auge
+                ctx.beginPath();
+                ctx.arc(ghostDrawX + tileSize / 2 - eyeOffsetX, ghostDrawY + tileSize / 2 - eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+                // Rechtes Auge
+                ctx.beginPath();
+                ctx.arc(ghostDrawX + tileSize / 2 + eyeOffsetX, ghostDrawY + tileSize / 2 - eyeOffsetY, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pupillen (schauen in Bewegungsrichtung oder auf Pacman)
+                ctx.fillStyle = '#000';
+                const pupilRadius = tileSize / 16;
+                let pupilShiftX = 0;
+                let pupilShiftY = 0;
+
+                if (ghost.isFrightened) {
+                    // Verängstigte Pupillen
+                    ctx.beginPath();
+                    ctx.arc(ghostDrawX + tileSize / 2 - eyeOffsetX, ghostDrawY + tileSize / 2 - eyeOffsetY, pupilRadius/1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(ghostDrawX + tileSize / 2 + eyeOffsetX, ghostDrawY + tileSize / 2 - eyeOffsetY, pupilRadius/1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Normale Pupillen, die Pac-Man ansehen
+                    const angleToPacman = Math.atan2(pacman.y - ghost.y, pacman.x - ghost.x);
+                    pupilShiftX = Math.cos(angleToPacman) * eyeRadius / 2;
+                    pupilShiftY = Math.sin(angleToPacman) * eyeRadius / 2;
+
+                    ctx.beginPath();
+                    ctx.arc(ghostDrawX + tileSize / 2 - eyeOffsetX + pupilShiftX, ghostDrawY + tileSize / 2 - eyeOffsetY + pupilShiftY, pupilRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(ghostDrawX + tileSize / 2 + eyeOffsetX + pupilShiftX, ghostDrawY + tileSize / 2 - eyeOffsetY + pupilShiftY, pupilRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+
+        function updateGame() {
+            if (!gameRunning) return;
+
+            movePacman();
+            moveGhosts();
+            checkCollisions();
+            updatePowerPill();
+
+            if (totalPellets === 0) {
+                winGame();
+            }
+        }
+
+        function movePacman() {
+            // Mundanimation
+            pacman.mouthAngle += pacman.mouthOpen ? -0.05 : 0.05;
+            if (pacman.mouthAngle < 0 || pacman.mouthAngle > 0.2) {
+                pacman.mouthOpen = !pacman.mouthOpen;
+            }
+
+
+            let newX = pacman.x;
+            let newY = pacman.y;
+            let moved = false;
+
+            // Versuche zuerst die nächste gewünschte Richtung
+            if (canMove(pacman.x, pacman.y, pacman.nextDir)) {
+                pacman.dir = pacman.nextDir;
+            }
+
+            // Bewege in die aktuelle (oder gerade aktualisierte) Richtung
+            switch (pacman.dir) {
+                case 'UP':
+                    newY -= pacman.speed;
+                    pacman.angle = -Math.PI / 2;
+                    break;
+                case 'DOWN':
+                    newY += pacman.speed;
+                    pacman.angle = Math.PI / 2;
+                    break;
+                case 'LEFT':
+                    newX -= pacman.speed;
+                    pacman.angle = Math.PI;
+                    break;
+                case 'RIGHT':
+                    newX += pacman.speed;
+                    pacman.angle = 0;
+                    break;
+            }
+
+            // Kollisionsprüfung für die geplante Bewegung
+            // Wir prüfen die Kachel, in die sich Pacman bewegt
+            const targetTileX = Math.floor(pacman.dir === 'LEFT' ? newX : (pacman.dir === 'RIGHT' ? newX + 0.99 : newX + 0.5));
+            const targetTileY = Math.floor(pacman.dir === 'UP' ? newY : (pacman.dir === 'DOWN' ? newY + 0.99 : newY + 0.5));
+
+
+            if (map[targetTileY] && map[targetTileY][targetTileX] !== 0) {
+                 // Tunnel-Logik
+                if (newX < -0.5) pacman.x = gridWidth -0.51; // Von links nach rechts
+                else if (newX >= gridWidth -0.49) pacman.x = -0.49; // Von rechts nach links
+                else pacman.x = newX;
+
+                if (newY < -0.5) pacman.y = gridHeight -0.51;
+                else if (newY >= gridHeight -0.49) pacman.y = -0.49;
+                else pacman.y = newY;
+
+                moved = true;
+            } else {
+                // An der Wand, stoppen und auf Kachelmitte ausrichten
+                pacman.x = Math.round(pacman.x);
+                pacman.y = Math.round(pacman.y);
+            }
+
+
+            // Pellet-Kollision
+            const currentTileX = Math.round(pacman.x);
+            const currentTileY = Math.round(pacman.y);
+
+            if (map[currentTileY] && map[currentTileY][currentTileX] === 2) { // Punkt
+                map[currentTileY][currentTileX] = 1; // Leerer Weg
+                score += 10;
+                totalPellets--;
+                updateScoreboard();
+            } else if (map[currentTileY] && map[currentTileY][currentTileX] === 3) { // Power-Pille
+                map[currentTileY][currentTileX] = 1; // Leerer Weg
+                score += 50;
+                activatePowerPill();
+                updateScoreboard();
+            }
+        }
+
+        function canMove(currentX, currentY, direction) {
+            let checkX = Math.round(currentX); // Runde auf die nächste Kachel, um die Bewegung zu prüfen
+            let checkY = Math.round(currentY);
+
+            switch (direction) {
+                case 'UP':    checkY--; break;
+                case 'DOWN':  checkY++; break;
+                case 'LEFT':  checkX--; break;
+                case 'RIGHT': checkX++; break;
+            }
+
+            // Tunnel-Logik für canMove
+            if (checkX < 0) return map[checkY][gridWidth - 1] !== 0;
+            if (checkX >= gridWidth) return map[checkY][0] !== 0;
+            if (checkY < 0) return map[gridHeight - 1][checkX] !== 0;
+            if (checkY >= gridHeight) return map[0][checkX] !== 0;
+
+
+            return map[checkY] && map[checkY][checkX] !== 0 && map[checkY][checkX] !== undefined;
+        }
+
+
+        function moveGhosts() {
+            ghosts.forEach(ghost => {
+                if (ghost.isEaten) {
+                    // Bewege den Geist zurück zum Geisterhaus (oder einen bestimmten Respawn-Punkt)
+                    const spawnX = ghostSpawnPoints[ghost.id].x;
+                    const spawnY = ghostSpawnPoints[ghost.id].y;
+                    if (Math.abs(ghost.x - spawnX) < ghost.speed && Math.abs(ghost.y - spawnY) < ghost.speed) {
+                        ghost.x = spawnX;
+                        ghost.y = spawnY;
+                        ghost.isEaten = false;
+                        ghost.isFrightened = false; // Nicht mehr verängstigt nach Respawn
+                    } else {
+                        if (ghost.x < spawnX) ghost.x += ghost.speed / 2; // Langsamer zurück
+                        else if (ghost.x > spawnX) ghost.x -= ghost.speed / 2;
+                        if (ghost.y < spawnY) ghost.y += ghost.speed / 2;
+                        else if (ghost.y > spawnY) ghost.y -= ghost.speed / 2;
+                    }
+                    return; // Überspringe normale Bewegung
+                }
+
+
+                // Ziel bestimmen
+                if (ghost.isFrightened) {
+                    // Weglaufen (zufällige gültige Richtung)
+                    const possibleMoves = [];
+                    if (canMove(ghost.x, ghost.y, 'UP') && ghost.dir !== 'DOWN') possibleMoves.push('UP');
+                    if (canMove(ghost.x, ghost.y, 'DOWN') && ghost.dir !== 'UP') possibleMoves.push('DOWN');
+                    if (canMove(ghost.x, ghost.y, 'LEFT') && ghost.dir !== 'RIGHT') possibleMoves.push('LEFT');
+                    if (canMove(ghost.x, ghost.y, 'RIGHT') && ghost.dir !== 'LEFT') possibleMoves.push('RIGHT');
+
+                    if (possibleMoves.length > 0) {
+                        ghost.dir = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                    }
+                } else {
+                    // Pac-Man jagen (einfache Logik: wähle die Richtung, die die Distanz verringert)
+                    // oder ein spezifisches Verhalten pro Geist (Blinky, Pinky, Inky, Clyde)
+                    // Für dieses Beispiel: Einfache Verfolgung
+                    const dx = pacman.x - ghost.x;
+                    const dy = pacman.y - ghost.y;
+                    const possibleMoves = [];
+                    const preferredMoves = [];
+
+                    // Horizontale Bewegung bevorzugen, wenn dx größer ist, sonst vertikal
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        if (dx > 0 && canMove(ghost.x, ghost.y, 'RIGHT') && ghost.dir !== 'LEFT') preferredMoves.push('RIGHT');
+                        if (dx < 0 && canMove(ghost.x, ghost.y, 'LEFT') && ghost.dir !== 'RIGHT') preferredMoves.push('LEFT');
+                        if (dy > 0 && canMove(ghost.x, ghost.y, 'DOWN') && ghost.dir !== 'UP') possibleMoves.push('DOWN');
+                        if (dy < 0 && canMove(ghost.x, ghost.y, 'UP') && ghost.dir !== 'DOWN') possibleMoves.push('UP');
+                    } else {
+                        if (dy > 0 && canMove(ghost.x, ghost.y, 'DOWN') && ghost.dir !== 'UP') preferredMoves.push('DOWN');
+                        if (dy < 0 && canMove(ghost.x, ghost.y, 'UP') && ghost.dir !== 'DOWN') preferredMoves.push('UP');
+                        if (dx > 0 && canMove(ghost.x, ghost.y, 'RIGHT') && ghost.dir !== 'LEFT') possibleMoves.push('RIGHT');
+                        if (dx < 0 && canMove(ghost.x, ghost.y, 'LEFT') && ghost.dir !== 'RIGHT') possibleMoves.push('LEFT');
+                    }
+
+                    // Füge verbleibende mögliche Züge hinzu, falls keine bevorzugten vorhanden sind oder um Sackgassen zu vermeiden
+                    if (canMove(ghost.x, ghost.y, 'UP') && ghost.dir !== 'DOWN' && !preferredMoves.includes('UP') && !possibleMoves.includes('UP')) possibleMoves.push('UP');
+                    if (canMove(ghost.x, ghost.y, 'DOWN') && ghost.dir !== 'UP' && !preferredMoves.includes('DOWN') && !possibleMoves.includes('DOWN')) possibleMoves.push('DOWN');
+                    if (canMove(ghost.x, ghost.y, 'LEFT') && ghost.dir !== 'RIGHT' && !preferredMoves.includes('LEFT') && !possibleMoves.includes('LEFT')) possibleMoves.push('LEFT');
+                    if (canMove(ghost.x, ghost.y, 'RIGHT') && ghost.dir !== 'LEFT' && !preferredMoves.includes('RIGHT') && !possibleMoves.includes('RIGHT')) possibleMoves.push('RIGHT');
+
+
+                    if (preferredMoves.length > 0) {
+                         // Wenn der Geist an einer Kreuzung ist und sich nicht umdrehen muss
+                        if (Math.abs(ghost.x - Math.round(ghost.x)) < ghost.speed && Math.abs(ghost.y - Math.round(ghost.y)) < ghost.speed) {
+                            ghost.dir = preferredMoves[Math.floor(Math.random() * preferredMoves.length)];
+                        }
+                    } else if (possibleMoves.length > 0) {
+                         if (Math.abs(ghost.x - Math.round(ghost.x)) < ghost.speed && Math.abs(ghost.y - Math.round(ghost.y)) < ghost.speed) {
+                            ghost.dir = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+                        }
+                    } else {
+                        // Umdrehen, wenn keine andere Option
+                        if (ghost.dir === 'UP') ghost.dir = 'DOWN';
+                        else if (ghost.dir === 'DOWN') ghost.dir = 'UP';
+                        else if (ghost.dir === 'LEFT') ghost.dir = 'RIGHT';
+                        else if (ghost.dir === 'RIGHT') ghost.dir = 'LEFT';
+                    }
+                }
+
+
+                // Geist bewegen
+                let newGhostX = ghost.x;
+                let newGhostY = ghost.y;
+
+                switch (ghost.dir) {
+                    case 'UP':    newGhostY -= ghost.speed; break;
+                    case 'DOWN':  newGhostY += ghost.speed; break;
+                    case 'LEFT':  newGhostX -= ghost.speed; break;
+                    case 'RIGHT': newGhostX += ghost.speed; break;
+                }
+
+                // Kollisionsprüfung für Geist (vereinfacht, da canMove bereits prüft)
+                const ghostTargetTileX = Math.floor(ghost.dir === 'LEFT' ? newGhostX : (ghost.dir === 'RIGHT' ? newGhostX + 0.99 : newGhostX + 0.5));
+                const ghostTargetTileY = Math.floor(ghost.dir === 'UP' ? newGhostY : (ghost.dir === 'DOWN' ? newGhostY + 0.99 : newGhostY + 0.5));
+
+
+                if (map[ghostTargetTileY] && map[ghostTargetTileY][ghostTargetTileX] !== 0) {
+                    // Tunnel-Logik für Geister
+                    if (newGhostX < -0.5) ghost.x = gridWidth - 0.51;
+                    else if (newGhostX >= gridWidth - 0.49) ghost.x = -0.49;
+                    else ghost.x = newGhostX;
+
+                    if (newGhostY < -0.5) ghost.y = gridHeight - 0.51;
+                    else if (newGhostY >= gridHeight - 0.49) ghost.y = -0.49;
+                    else ghost.y = newGhostY;
+                } else {
+                    // An Wand, versuche andere Richtung (oder bleibe stehen, wenn keine Kreuzung)
+                    ghost.x = Math.round(ghost.x);
+                    ghost.y = Math.round(ghost.y);
+                    // Einfache Logik: Drehe um oder wähle zufällig, wenn feststeckend
+                    const oppositeDir = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
+                    if (canMove(ghost.x, ghost.y, oppositeDir[ghost.dir])) {
+                        ghost.dir = oppositeDir[ghost.dir];
+                    } else {
+                        // Versuche eine zufällige andere Richtung
+                        const allDirs = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+                        const availableDirs = allDirs.filter(dir => canMove(ghost.x, ghost.y, dir) && dir !== oppositeDir[ghost.dir]);
+                        if (availableDirs.length > 0) {
+                            ghost.dir = availableDirs[Math.floor(Math.random() * availableDirs.length)];
+                        }
+                    }
+                }
+            });
+        }
+
+        function checkCollisions() {
+            const pacmanTileX = Math.round(pacman.x);
+            const pacmanTileY = Math.round(pacman.y);
+
+            ghosts.forEach(ghost => {
+                if (ghost.isEaten) return; // Bereits gefressene Geister ignorieren
+
+                const ghostTileX = Math.round(ghost.x);
+                const ghostTileY = Math.round(ghost.y);
+
+                if (pacmanTileX === ghostTileX && pacmanTileY === ghostTileY) {
+                    if (powerPillActive && ghost.isFrightened) {
+                        // Pac-Man frisst Geist
+                        score += 200; // Punkte für gefressenen Geist
+                        ghost.isEaten = true;
+                        // Geist wird für kurze Zeit unsichtbar oder kehrt zur Basis zurück
+                        // Hier: Markieren als gefressen, Bewegung kümmert sich um Rückkehr
+                        updateScoreboard();
+                    } else {
+                        // Geist frisst Pac-Man
+                        loseLife();
+                    }
+                }
+            });
+        }
+
+        function activatePowerPill() {
+            powerPillActive = true;
+            powerPillTimer = powerPillDuration;
+            ghosts.forEach(ghost => {
+                if (!ghost.isEaten) { // Nur Geister, die nicht schon auf dem Weg zur Basis sind
+                    ghost.isFrightened = true;
+                    // Optional: Richtung umkehren
+                    const oppositeDir = { UP: 'DOWN', DOWN: 'UP', LEFT: 'RIGHT', RIGHT: 'LEFT' };
+                    if (canMove(ghost.x, ghost.y, oppositeDir[ghost.dir])) {
+                         ghost.dir = oppositeDir[ghost.dir];
+                    }
+                }
+            });
+        }
+
+        function updatePowerPill() {
+            if (powerPillActive) {
+                powerPillTimer -= 1000 / 60; // Ca. 60 FPS
+                if (powerPillTimer <= 0) {
+                    powerPillActive = false;
+                    ghosts.forEach(ghost => {
+                        ghost.isFrightened = false;
+                        // isEaten bleibt true, bis sie respawnen
+                    });
+                }
+                // Visueller Hinweis, dass Power-Pille bald endet (z.B. Blinken der Geister)
+                if (powerPillTimer < 3000 && powerPillTimer > 0) {
+                    if (Math.floor(powerPillTimer / 250) % 2 === 0) { // Alle 250ms Farbe wechseln
+                         ghosts.forEach(g => { if(g.isFrightened && !g.isEaten) g.colorBlink = '#FFFFFF'; });
+                    } else {
+                         ghosts.forEach(g => { if(g.isFrightened && !g.isEaten) g.colorBlink = '#ADD8E6'; }); // Zurück zu Frightened-Farbe
+                    }
+                } else {
+                    ghosts.forEach(g => g.colorBlink = null); // Normales Blinken entfernen
+                }
+            }
+        }
+
+
+        function loseLife() {
+            lives--;
+            updateScoreboard();
+            if (lives <= 0) {
+                gameOver();
+            } else {
+                // Pac-Man und Geister zurücksetzen
+                resetPositionsAfterLifeLost();
+                // Kurze Pause oder Animation
+                gameRunning = false;
+                setTimeout(() => {
+                    gameRunning = true;
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    gameLoop(); // Spielschleife neu starten, wenn sie gestoppt wurde
+                }, 1500); // 1.5 Sekunden Pause
+            }
+        }
+
+        function resetPositionsAfterLifeLost() {
+            pacman.x = 9;
+            pacman.y = 15;
+            pacman.dir = 'RIGHT';
+            pacman.nextDir = 'RIGHT';
+            spawnGhosts(); // Geister an ihre Startpositionen
+        }
+
+
+        function updateScoreboard() {
+            scoreDisplay.textContent = score;
+            livesDisplay.textContent = lives;
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            messageText.textContent = `Game Over! Punkte: ${score}`;
+            messageBox.style.display = 'flex';
+        }
+
+        function winGame() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            messageText.textContent = `Gewonnen! Punkte: ${score}`;
+            messageBox.style.display = 'flex';
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            updateGame();
+            drawGame();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // Event Listener für Tastatureingaben
+        window.addEventListener('keydown', (e) => {
+            if (!gameRunning && e.key !== "Escape") return; // Erlaube Neustart auch wenn nicht läuft
+            switch (e.key) {
+                case 'ArrowUp': case 'w': pacman.nextDir = 'UP'; e.preventDefault(); break;
+                case 'ArrowDown': case 's': pacman.nextDir = 'DOWN'; e.preventDefault(); break;
+                case 'ArrowLeft': case 'a': pacman.nextDir = 'LEFT'; e.preventDefault(); break;
+                case 'ArrowRight': case 'd': pacman.nextDir = 'RIGHT'; e.preventDefault(); break;
+                case 'Escape': // Neustart mit Escape-Taste (oder wenn MessageBox sichtbar ist)
+                    if (messageBox.style.display === 'flex') {
+                        initGame(); // Startet das Spiel neu
+                    }
+                    break;
+            }
+        });
+
+        // Event Listener für Bildschirm-Buttons
+        document.getElementById('upButton').addEventListener('click', () => pacman.nextDir = 'UP');
+        document.getElementById('downButton').addEventListener('click', () => pacman.nextDir = 'DOWN');
+        document.getElementById('leftButton').addEventListener('click', () => pacman.nextDir = 'LEFT');
+        document.getElementById('rightButton').addEventListener('click', () => pacman.nextDir = 'RIGHT');
+        restartButton.addEventListener('click', initGame);
+
+
+        // Touch-Steuerung Event Listener
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Verhindert Scrollen auf Touch-Geräten
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!touchStartX || !touchStartY) {
+                return;
+            }
+            touchEndX = e.touches[0].clientX;
+            touchEndY = e.touches[0].clientY;
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (!touchEndX || !touchEndY) return; // Kein Wischen, nur ein Tippen
+
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+            const absDeltaX = Math.abs(deltaX);
+            const absDeltaY = Math.abs(deltaY);
+
+            // Mindestdistanz für eine Wischgeste, um versehentliche Eingaben zu vermeiden
+            const swipeThreshold = 20;
+
+            if (absDeltaX > swipeThreshold || absDeltaY > swipeThreshold) {
+                if (absDeltaX > absDeltaY) {
+                    // Horizontales Wischen
+                    if (deltaX > 0) {
+                        pacman.nextDir = 'RIGHT';
+                    } else {
+                        pacman.nextDir = 'LEFT';
+                    }
+                } else {
+                    // Vertikales Wischen
+                    if (deltaY > 0) {
+                        pacman.nextDir = 'DOWN';
+                    } else {
+                        pacman.nextDir = 'UP';
+                    }
+                }
+            }
+            // Reset touch coordinates
+            touchStartX = 0;
+            touchStartY = 0;
+            touchEndX = 0;
+            touchEndY = 0;
+        }, { passive: false });
+
+
+        // Spielstart und Größenanpassung bei Fensteränderung
+        window.addEventListener('resize', resizeCanvas);
+        initGame(); // Spiel initialisieren und starten
+    </script>
+</body>
+</html>
