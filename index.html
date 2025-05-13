@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meine Buchsammlung</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .book-card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .book-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .modal {
+            display: none; /* Standardmäßig ausgeblendet */
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5); /* Halbdurchsichtiger Hintergrund */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .modal-close-btn {
+            cursor: pointer;
+            float: right;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 20px;
+            background-color: #28a745;
+            color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.5s, bottom 0.5s;
+        }
+        .toast.show {
+            opacity: 1;
+            bottom: 30px;
+        }
+        .toast.error {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+
+    <div class="container mx-auto max-w-4xl">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-sky-600">Meine Buchsammlung</h1>
+            <p class="text-gray-600 mt-2">Erfasse und verwalte deine gelesenen und ungelesenen Bücher.</p>
+        </header>
+
+        <div class="bg-white p-6 rounded-lg shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-6 text-sky-700">Neues Buch hinzufügen</h2>
+            <form id="addBookForm" class="space-y-4">
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700">Titel <span class="text-red-500">*</span></label>
+                    <input type="text" id="title" name="title" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="author" class="block text-sm font-medium text-gray-700">Autor <span class="text-red-500">*</span></label>
+                    <input type="text" id="author" name="author" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="isbn" class="block text-sm font-medium text-gray-700">ISBN</label>
+                    <input type="text" id="isbn" name="isbn" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="year" class="block text-sm font-medium text-gray-700">Erscheinungsjahr</label>
+                    <input type="number" id="year" name="year" min="0" max="2099" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                 <div>
+                    <label for="coverImageUrl" class="block text-sm font-medium text-gray-700">Buchcover URL (optional)</label>
+                    <input type="url" id="coverImageUrl" name="coverImageUrl" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="notes" class="block text-sm font-medium text-gray-700">Notizen</label>
+                    <textarea id="notes" name="notes" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"></textarea>
+                </div>
+                <button type="submit" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-md shadow-md focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
+                    Buch hinzufügen
+                </button>
+            </form>
+        </div>
+
+        <div class="bg-white p-4 rounded-lg shadow-md mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div>
+                <label for="filterReadStatus" class="text-sm font-medium text-gray-700 mr-2">Status filtern:</label>
+                <select id="filterReadStatus" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500">
+                    <option value="all">Alle</option>
+                    <option value="read">Gelesen</option>
+                    <option value="unread">Ungelesen</option>
+                </select>
+            </div>
+            <div>
+                <label for="sortBooksBy" class="text-sm font-medium text-gray-700 mr-2">Sortieren nach:</label>
+                <select id="sortBooksBy" class="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500">
+                    <option value="title_asc">Titel (A-Z)</option>
+                    <option value="title_desc">Titel (Z-A)</option>
+                    <option value="author_asc">Autor (A-Z)</option>
+                    <option value="author_desc">Autor (Z-A)</option>
+                    <option value="year_asc">Jahr (aufsteigend)</option>
+                    <option value="year_desc">Jahr (absteigend)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="bookList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+         <p id="noBooksMessage" class="text-center text-gray-500 mt-10 hidden">Noch keine Bücher hinzugefügt. Fange jetzt an!</p>
+    </div>
+
+    <div id="bookDetailModal" class="modal">
+        <div class="modal-content">
+            <span id="closeModalBtn" class="modal-close-btn">&times;</span>
+            <h3 class="text-xl font-semibold mb-4 text-sky-700" id="modalTitle">Buchdetails</h3>
+            <form id="editBookForm" class="space-y-3">
+                <input type="hidden" id="editBookId">
+                <div>
+                    <label for="editTitle" class="block text-sm font-medium text-gray-700">Titel <span class="text-red-500">*</span></label>
+                    <input type="text" id="editTitle" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="editAuthor" class="block text-sm font-medium text-gray-700">Autor <span class="text-red-500">*</span></label>
+                    <input type="text" id="editAuthor" required class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="editIsbn" class="block text-sm font-medium text-gray-700">ISBN</label>
+                    <input type="text" id="editIsbn" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="editYear" class="block text-sm font-medium text-gray-700">Erscheinungsjahr</label>
+                    <input type="number" id="editYear" min="0" max="2099" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="editCoverImageUrl" class="block text-sm font-medium text-gray-700">Buchcover URL</label>
+                    <input type="url" id="editCoverImageUrl" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="editNotes" class="block text-sm font-medium text-gray-700">Notizen</label>
+                    <textarea id="editNotes" rows="3" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm"></textarea>
+                </div>
+                 <div>
+                    <label for="editReadStatus" class="block text-sm font-medium text-gray-700">Status</label>
+                    <select id="editReadStatus" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500 sm:text-sm">
+                        <option value="unread">Ungelesen</option>
+                        <option value="read">Gelesen</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3 pt-2">
+                     <button type="button" id="cancelEditBtn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-medium py-2 px-4 rounded-md shadow-sm">Abbrechen</button>
+                    <button type="submit" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-md shadow-md">Änderungen speichern</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="toastNotification" class="toast"></div>
+
+    <script>
+        // DOM-Elemente abrufen
+        const addBookForm = document.getElementById('addBookForm');
+        const bookListDiv = document.getElementById('bookList');
+        const noBooksMessage = document.getElementById('noBooksMessage');
+        const toastNotification = document.getElementById('toastNotification');
+
+        // Filter und Sortierung
+        const filterReadStatus = document.getElementById('filterReadStatus');
+        const sortBooksBy = document.getElementById('sortBooksBy');
+
+        // Modal Elemente
+        const bookDetailModal = document.getElementById('bookDetailModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const cancelEditBtn = document.getElementById('cancelEditBtn');
+        const editBookForm = document.getElementById('editBookForm');
+        const modalTitle = document.getElementById('modalTitle');
+
+        // Standard-Coverbild URL
+        const DEFAULT_COVER_IMAGE = 'https://placehold.co/300x450/e2e8f0/94a3b8?text=Kein+Cover';
+
+        // Funktion zum Anzeigen von Toast-Benachrichtigungen
+        function showToast(message, type = 'success') {
+            toastNotification.textContent = message;
+            toastNotification.className = `toast show ${type === 'error' ? 'error' : ''}`;
+            setTimeout(() => {
+                toastNotification.className = 'toast';
+            }, 3000);
+        }
+
+        // Funktion zum Laden der Bücher aus dem LocalStorage
+        function getBooks() {
+            return JSON.parse(localStorage.getItem('books')) || [];
+        }
+
+        // Funktion zum Speichern der Bücher im LocalStorage
+        function saveBooks(books) {
+            localStorage.setItem('books', JSON.stringify(books));
+        }
+
+        // Funktion zum Rendern der Bücherliste
+        function renderBooks() {
+            const books = getBooks();
+            let filteredAndSortedBooks = [...books];
+
+            // Filtern
+            const statusFilter = filterReadStatus.value;
+            if (statusFilter !== 'all') {
+                filteredAndSortedBooks = filteredAndSortedBooks.filter(book => book.readStatus === statusFilter);
+            }
+
+            // Sortieren
+            const sortBy = sortBooksBy.value;
+            switch (sortBy) {
+                case 'title_asc':
+                    filteredAndSortedBooks.sort((a, b) => a.title.localeCompare(b.title));
+                    break;
+                case 'title_desc':
+                    filteredAndSortedBooks.sort((a, b) => b.title.localeCompare(a.title));
+                    break;
+                case 'author_asc':
+                    filteredAndSortedBooks.sort((a, b) => a.author.localeCompare(b.author));
+                    break;
+                case 'author_desc':
+                    filteredAndSortedBooks.sort((a, b) => b.author.localeCompare(a.author));
+                    break;
+                case 'year_asc':
+                    filteredAndSortedBooks.sort((a, b) => (a.year || 0) - (b.year || 0));
+                    break;
+                case 'year_desc':
+                    filteredAndSortedBooks.sort((a, b) => (b.year || 0) - (a.year || 0));
+                    break;
+            }
+
+
+            bookListDiv.innerHTML = ''; // Liste leeren
+
+            if (filteredAndSortedBooks.length === 0) {
+                if (books.length > 0 && statusFilter !== 'all') { // Es gibt Bücher, aber der Filter zeigt keine
+                     bookListDiv.innerHTML = `<p class="col-span-full text-center text-gray-500 mt-6">Keine Bücher entsprechen dem aktuellen Filter.</p>`;
+                } else { // Gar keine Bücher vorhanden
+                    noBooksMessage.classList.remove('hidden');
+                }
+            } else {
+                noBooksMessage.classList.add('hidden');
+                filteredAndSortedBooks.forEach(book => {
+                    const bookCard = `
+                        <div class="book-card bg-white rounded-lg shadow-md overflow-hidden flex flex-col p-4" data-id="${book.id}">
+                            <img src="${book.coverImageUrl || DEFAULT_COVER_IMAGE}" alt="Buchcover von ${book.title}" class="w-full h-48 sm:h-64 object-contain mb-4 rounded" onerror="this.onerror=null;this.src='${DEFAULT_COVER_IMAGE}';">
+                            <div class="flex-grow">
+                                <h3 class="text-lg font-semibold text-sky-700 mb-1">${book.title}</h3>
+                                <p class="text-sm text-gray-600 mb-1">Von: ${book.author}</p>
+                                ${book.isbn ? `<p class="text-xs text-gray-500 mb-1">ISBN: ${book.isbn}</p>` : ''}
+                                ${book.year ? `<p class="text-xs text-gray-500 mb-1">Jahr: ${book.year}</p>` : ''}
+                                ${book.notes ? `<p class="text-xs text-gray-500 mt-2 mb-2 italic">Notiz: ${book.notes.substring(0,50)}${book.notes.length > 50 ? '...' : ''}</p>` : ''}
+                                <p class="text-xs font-medium ${book.readStatus === 'read' ? 'text-green-600' : 'text-yellow-600'}">${book.readStatus === 'read' ? 'Gelesen' : 'Ungelesen'}</p>
+                            </div>
+                            <div class="mt-4 pt-3 border-t border-gray-200 flex justify-between items-center space-x-2">
+                                <button class="edit-book-btn text-sm bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-1.5 px-3 rounded-md transition duration-150" data-id="${book.id}">Bearbeiten</button>
+                                <button class="delete-book-btn text-sm bg-red-500 hover:bg-red-600 text-white font-medium py-1.5 px-3 rounded-md transition duration-150" data-id="${book.id}">Löschen</button>
+                            </div>
+                        </div>
+                    `;
+                    bookListDiv.innerHTML += bookCard;
+                });
+            }
+
+            // Event-Listener für Löschen-Buttons neu binden
+            document.querySelectorAll('.delete-book-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const bookId = this.dataset.id;
+                    if (confirm('Möchtest du dieses Buch wirklich löschen?')) {
+                        deleteBook(bookId);
+                    }
+                });
+            });
+
+            // Event-Listener für Bearbeiten-Buttons neu binden
+            document.querySelectorAll('.edit-book-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const bookId = this.dataset.id;
+                    openEditModal(bookId);
+                });
+            });
+        }
+
+        // Funktion zum Hinzufügen eines Buches
+        addBookForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // Standard-Formularübermittlung verhindern
+
+            const title = document.getElementById('title').value.trim();
+            const author = document.getElementById('author').value.trim();
+            const isbn = document.getElementById('isbn').value.trim();
+            const year = document.getElementById('year').value;
+            const coverImageUrl = document.getElementById('coverImageUrl').value.trim();
+            const notes = document.getElementById('notes').value.trim();
+
+            if (!title || !author) {
+                showToast('Titel und Autor sind Pflichtfelder.', 'error');
+                return;
+            }
+
+            const newBook = {
+                id: Date.now().toString(), // Eindeutige ID generieren
+                title,
+                author,
+                isbn,
+                year: year ? parseInt(year) : null,
+                coverImageUrl,
+                notes,
+                readStatus: 'unread' // Standardmäßig ungelesen
+            };
+
+            const books = getBooks();
+            books.push(newBook);
+            saveBooks(books);
+            renderBooks();
+            addBookForm.reset(); // Formular zurücksetzen
+            showToast('Buch erfolgreich hinzugefügt!');
+        });
+
+        // Funktion zum Löschen eines Buches
+        function deleteBook(bookId) {
+            let books = getBooks();
+            books = books.filter(book => book.id !== bookId);
+            saveBooks(books);
+            renderBooks();
+            showToast('Buch erfolgreich gelöscht!', 'success');
+        }
+
+        // Modal öffnen und mit Buchdaten füllen
+        function openEditModal(bookId) {
+            const books = getBooks();
+            const bookToEdit = books.find(book => book.id === bookId);
+            if (!bookToEdit) return;
+
+            modalTitle.textContent = `"${bookToEdit.title}" bearbeiten`;
+            document.getElementById('editBookId').value = bookToEdit.id;
+            document.getElementById('editTitle').value = bookToEdit.title;
+            document.getElementById('editAuthor').value = bookToEdit.author;
+            document.getElementById('editIsbn').value = bookToEdit.isbn || '';
+            document.getElementById('editYear').value = bookToEdit.year || '';
+            document.getElementById('editCoverImageUrl').value = bookToEdit.coverImageUrl || '';
+            document.getElementById('editNotes').value = bookToEdit.notes || '';
+            document.getElementById('editReadStatus').value = bookToEdit.readStatus || 'unread';
+
+            bookDetailModal.style.display = 'flex';
+        }
+
+        // Modal schließen
+        closeModalBtn.addEventListener('click', () => {
+            bookDetailModal.style.display = 'none';
+        });
+        cancelEditBtn.addEventListener('click', () => {
+            bookDetailModal.style.display = 'none';
+        });
+
+        // Klick außerhalb des Modals schließt es auch
+        window.addEventListener('click', (event) => {
+            if (event.target === bookDetailModal) {
+                bookDetailModal.style.display = 'none';
+            }
+        });
+
+        // Buch bearbeiten speichern
+        editBookForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const bookId = document.getElementById('editBookId').value;
+            const title = document.getElementById('editTitle').value.trim();
+            const author = document.getElementById('editAuthor').value.trim();
+
+            if (!title || !author) {
+                showToast('Titel und Autor dürfen nicht leer sein.', 'error');
+                return;
+            }
+
+            let books = getBooks();
+            const bookIndex = books.findIndex(book => book.id === bookId);
+
+            if (bookIndex > -1) {
+                books[bookIndex].title = title;
+                books[bookIndex].author = author;
+                books[bookIndex].isbn = document.getElementById('editIsbn').value.trim();
+                const yearVal = document.getElementById('editYear').value;
+                books[bookIndex].year = yearVal ? parseInt(yearVal) : null;
+                books[bookIndex].coverImageUrl = document.getElementById('editCoverImageUrl').value.trim();
+                books[bookIndex].notes = document.getElementById('editNotes').value.trim();
+                books[bookIndex].readStatus = document.getElementById('editReadStatus').value;
+                saveBooks(books);
+                renderBooks();
+                bookDetailModal.style.display = 'none';
+                showToast('Buch erfolgreich aktualisiert!');
+            } else {
+                showToast('Fehler beim Aktualisieren des Buches.', 'error');
+            }
+        });
+
+        // Event Listener für Filter und Sortierung
+        filterReadStatus.addEventListener('change', renderBooks);
+        sortBooksBy.addEventListener('change', renderBooks);
+
+
+        // Initiales Rendern der Bücher beim Laden der Seite
+        document.addEventListener('DOMContentLoaded', renderBooks);
+    </script>
+</body>
+</html>
